@@ -69,6 +69,21 @@
             color: white;
             border-color: transparent;
         }
+
+        /* 随机选择按钮 */
+        .random-btn {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background: linear-gradient(rgba(164,119,190,0.8), rgba(195,111,132,0.8));
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .random-btn:hover {
+            opacity: 0.9;
+        }
     </style>
 </head>
 <body>
@@ -87,6 +102,11 @@
                 class="form-control form-control-lg"
                 style="border-radius: 25px"
             >
+        </div>
+
+        <!-- 随机选择按钮 -->
+        <div class="text-center">
+            <button class="random-btn" id="randomBtn">随机选择一首歌</button>
         </div>
 
         <!-- 分页控件 -->
@@ -226,6 +246,17 @@
                 );
                 app.currentPage = 1;
                 render();
+            });
+
+            // 随机选择功能
+            document.getElementById('randomBtn').addEventListener('click', () => {
+                if (app.filteredSongs.length > 0) {
+                    const randomIndex = Math.floor(Math.random() * app.filteredSongs.length);
+                    const randomSong = app.filteredSongs[randomIndex];
+                    alert(`随机选择的歌曲是：${randomSong.name} - ${randomSong.artist}`);
+                } else {
+                    alert('没有可用的歌曲');
+                }
             });
         }
 

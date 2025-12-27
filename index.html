@@ -1,0 +1,237 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>桃夜朔的怪盗歌单 - TAKE YOUR HEART</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Noto+Sans+SC:wght@700;900&family=Oswald:wght@700&family=Paytone+One&display=swap" rel="stylesheet">
+  
+  <!-- [NEW] 引入 Excel 解析库 和 拼音库 -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <script src="https://gw.alipayobjects.com/os/lib/tiny-pinyin/1.3.2/dist/tiny-pinyin.js"></script>
+
+  <style>
+    :root {
+      /* [UI-THEME-COLORS] 在这里定义三套主题色 */
+      --color-all: #ff2b8f;   /* 首页/全部：品粉色 */
+      --color-zh: #ff0000;    /* 中文：怪盗红 */
+      --color-en: #a855f7;    /* 外文：迷幻紫 */
+      
+      --theme-color: var(--color-all); 
+      --transition-color: var(--color-all); /* 转场动画专用变量 */
+      --p5-black: #000000;
+      --p5-white: #ffffff;
+    }
+
+    body {
+      margin: 0;
+      background-color: var(--p5-black);
+      overflow: hidden;
+      font-family: 'Noto Sans SC', sans-serif;
+      color: white;
+      cursor: none !important;
+    }
+
+    /* [UI-CURSOR] 幽灵鼠标样式 - 参考代码样式 */
+    #ghost-cursor {
+      position: fixed;
+      top: 0;
+      left: 0;
+      font-size: 32px;
+      pointer-events: none;
+      z-index: 10000;
+      user-select: none;
+      transform: translate(-50%, -50%) scaleX(-1); /* 水平翻转 */
+      line-height: 1;
+      will-change: left, top;
+      filter: drop-shadow(2px 2px 0px rgba(0,0,0,0.5));
+    }
+
+    a, button, input, [role="button"], .cursor-pointer, .song-row {
+      cursor: none !important;
+    }
+
+    .p5-noise {
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+      opacity: 0.12;
+      pointer-events: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+    }
+
+    /* [UI-SCROLLBAR-LEFT] 左侧滚动条逻辑 */
+    .scrollbar-left-mode { direction: rtl; }
+    .scrollbar-left-mode > * { direction: ltr; }
+
+    /* [UI-LIQUID-LAYER] 液态背景层 */
+    .liquid-red-layer {
+      background: linear-gradient(90deg, var(--theme-color), #ffffff, var(--theme-color), #000000, var(--theme-color));
+      background-size: 300% 100%;
+      opacity: 0;
+      transition: opacity 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+      animation: 
+        p5-oil-color-smooth 12s infinite linear,
+        p5-oil-sway-slow 6s infinite alternate ease-in-out;
+      z-index: 1;
+    }
+    .group:hover .liquid-red-layer { opacity: 0.9; }
+
+    @keyframes p5-oil-color-smooth {
+      0% { background-position: 0% 0%; }
+      100% { background-position: 100% 0%; }
+    }
+    @keyframes p5-oil-sway-slow {
+      0% { transform: translateX(-8px); }
+      100% { transform: translateX(8px); }
+    }
+
+    /* --- [ANIMATION] 子弹击中弹痕动画 (来自参考代码) --- */
+    @keyframes bullet-hit-pop {
+      0% { transform: translate(-50%, -50%) scale(0) rotate(0deg); opacity: 0; }
+      15% { transform: translate(-50%, -50%) scale(1.4) rotate(15deg); opacity: 1; }
+      30% { transform: translate(-50%, -50%) scale(0.9) rotate(-10deg); }
+      100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
+    }
+    @keyframes bullet-smoke {
+      0% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
+      100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
+    }
+
+    .animate-bullet-hit { animation: bullet-hit-pop 0.1s cubic-bezier(0.17, 0.89, 0.32, 1.49) forwards; }
+    .animate-bullet-smoke { animation: bullet-smoke 0.1s ease-out forwards; }
+
+    /* --- [ANIMATION] 复制提示爆炸动画 --- */
+    @keyframes p5-alert-explode {
+      0% { transform: scale(0) rotate(30deg); opacity: 0; }
+      50% { transform: scale(1.2) rotate(-5deg); opacity: 1; }
+      75% { transform: scale(0.95) rotate(2deg); }
+      100% { transform: scale(1) rotate(-3deg); opacity: 1; }
+    }
+    @keyframes p5-flash-hit { 0% { opacity: 0; } 10% { opacity: 1; background-color: white; } 30% { opacity: 0.5; background-color: var(--theme-color); } 100% { opacity: 0.2; } }
+
+    .animate-alert-explode { animation: p5-alert-explode 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+    .animate-flash-hit { animation: p5-flash-hit 0.6s ease-out forwards; }
+
+    /* --- [TRANSITION] 转场系统 (核心参考代码移植) --- */
+    /* 容器 */
+    .f1-mask {
+      position: fixed; inset: 0; z-index: 5000; pointer-events: none; visibility: hidden;
+      display: flex; justify-content: center; align-items: center;
+    }
+    .f1-active .f1-mask { visibility: visible; }
+    /* 面板基础 */
+    .f1-panel { position: absolute; width: 100%; height: 100%; opacity: 0; }
+
+    /* 动画定义 */
+    @keyframes corner-tl { 0%, 100% { transform: translate(-100%, -100%) scale(1.5); } 40%, 60% { transform: translate(0, 0) scale(1); } }
+    @keyframes corner-tr { 0%, 100% { transform: translate(100%, -100%) scale(1.5); } 40%, 60% { transform: translate(0, 0) scale(1); } }
+    @keyframes corner-bl { 0%, 100% { transform: translate(-100%, 100%) scale(1.5); } 40%, 60% { transform: translate(0, 0) scale(1); } }
+    @keyframes corner-br { 0%, 100% { transform: translate(100%, 100%) scale(1.5); } 40%, 60% { transform: translate(0, 0) scale(1); } }
+    @keyframes fade-overlay { 0%, 100% { opacity: 0; } 30%, 70% { opacity: 1; } }
+
+    @keyframes shutter-top { 0% { transform: translateY(-110%) skewY(-15deg); } 40%, 60% { transform: translateY(0%) skewY(-15deg); } 100% { transform: translateY(110%) skewY(-15deg); } }
+    @keyframes shutter-left { 0% { transform: translateX(-110%) skewX(-15deg); } 40%, 60% { transform: translateX(0%) skewX(-15deg); } 100% { transform: translateX(110%) skewX(-15deg); } }
+    @keyframes shutter-right { 0% { transform: translateX(110%) skewX(-15deg); } 40%, 60% { transform: translateX(0%) skewX(-15deg); } 100% { transform: translateX(-110%) skewX(-15deg); } }
+
+    /* 1. 四角切入 (dir-corner-blocks) - 首页 */
+    .f1-active.dir-corner-blocks .f1-panel { opacity: 1; width: 60%; height: 60%; }
+    /* 左上：主题色 */
+    .f1-active.dir-corner-blocks .f1-panel:nth-child(1) { top: 0; left: 0; background: var(--transition-color); clip-path: polygon(0 0, 100% 0, 0 100%); animation: corner-tl 1.5s cubic-bezier(0.8, 0, 0.2, 1) forwards; }
+    /* 右上：白色 */
+    .f1-active.dir-corner-blocks .f1-panel:nth-child(2) { top: 0; right: 0; background: #ffffff; clip-path: polygon(0 0, 100% 0, 100% 100%); animation: corner-tr 1.5s cubic-bezier(0.8, 0, 0.2, 1) forwards; }
+    /* 左下：白色 */
+    .f1-active.dir-corner-blocks .f1-panel:nth-child(3) { bottom: 0; left: 0; background: #ffffff; clip-path: polygon(0 0, 0 100%, 100% 100%); animation: corner-bl 1.5s cubic-bezier(0.8, 0, 0.2, 1) forwards; }
+    /* 右下：主题色 */
+    .f1-active.dir-corner-blocks .f1-panel:nth-child(4) { bottom: 0; right: 0; background: var(--transition-color); clip-path: polygon(100% 0, 0 100%, 100% 100%); animation: corner-br 1.5s cubic-bezier(0.8, 0, 0.2, 1) forwards; }
+    /* 黑色遮罩 */
+    .f1-active.dir-corner-blocks .f1-panel:nth-child(5) { width: 100%; height: 100%; background: #000; opacity: 0; animation: fade-overlay 1.5s forwards; z-index: -1; }
+
+    /* 2. 向下 (dir-down) */
+    .f1-active.dir-down .f1-panel { opacity: 1; width: 150%; height: 150%; top: -25%; left: -25%; }
+    .f1-active.dir-down .f1-panel:nth-child(1) { background: var(--transition-color); animation: shutter-top 1.4s cubic-bezier(0.8, 0, 0.2, 1) forwards; z-index: 10; }
+    .f1-active.dir-down .f1-panel:nth-child(2) { background: #fff; animation: shutter-top 1.4s cubic-bezier(0.8, 0, 0.2, 1) forwards; animation-delay: 0.05s; z-index: 9; }
+
+    /* 3. 向左 (dir-left) */
+    .f1-active.dir-left .f1-panel { opacity: 1; width: 150%; height: 150%; top: -25%; left: -25%; }
+    .f1-active.dir-left .f1-panel:nth-child(1) { background: var(--transition-color); animation: shutter-left 1.4s cubic-bezier(0.8, 0, 0.2, 1) forwards; z-index: 10; }
+    .f1-active.dir-left .f1-panel:nth-child(2) { background: #fff; animation: shutter-left 1.4s cubic-bezier(0.8, 0, 0.2, 1) forwards; animation-delay: 0.05s; z-index: 9; }
+
+    /* 4. 向右 (dir-right) */
+    .f1-active.dir-right .f1-panel { opacity: 1; width: 150%; height: 150%; top: -25%; left: -25%; }
+    .f1-active.dir-right .f1-panel:nth-child(1) { background: var(--transition-color); animation: shutter-right 1.4s cubic-bezier(0.8, 0, 0.2, 1) forwards; z-index: 10; }
+    .f1-active.dir-right .f1-panel:nth-child(2) { background: #fff; animation: shutter-right 1.4s cubic-bezier(0.8, 0, 0.2, 1) forwards; animation-delay: 0.05s; z-index: 9; }
+
+    /* 文本动画 */
+    .f1-label {
+      position: relative; z-index: 100; font-size: 8vw; color: white; font-style: italic;
+      transform: scale(3) rotate(-10deg); opacity: 0; text-shadow: 4px 4px 0 black;
+      font-family: 'Anton', sans-serif;
+    }
+    .f1-active .f1-label { animation: f1-text-pop 1.4s cubic-bezier(0.2, 1, 0.2, 1) forwards; }
+    @keyframes f1-text-pop { 0% { transform: scale(6) rotate(-40deg); opacity: 0; } 35%, 65% { transform: scale(1) rotate(-5deg); opacity: 1; } 100% { transform: scale(0) rotate(20deg); opacity: 0; } }
+
+    /* 滚动条 */
+    ::-webkit-scrollbar { width: 12px; }
+    ::-webkit-scrollbar-track { background: #000; }
+    ::-webkit-scrollbar-thumb { background: var(--theme-color); border: 2px solid black; }
+
+    .p5-font-title { font-family: 'Anton', sans-serif; text-transform: uppercase; }
+    
+    /* 扫光辅助类 */
+    .p5-sweep-text { position: relative; overflow: hidden; }
+    .p5-sweep-text::after {
+      content: "";
+      position: absolute;
+      top: 0; left: -100%;
+      width: 50%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+      transform: skewX(-25deg);
+      animation: sweep 3s infinite;
+    }
+    @keyframes sweep { 0% { left: -100%; } 100% { left: 200%; } }
+  </style>
+
+<link rel="stylesheet" href="/index.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@^19.2.3",
+      "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+      "react/": "https://esm.sh/react@^19.2.3/"
+    }
+  }
+  </script>
+  <script type="module" crossorigin src="/assets/index-CBzEN9Nw.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <!-- [UI-GHOST-ICON] -->
+  <div id="ghost-cursor">👻</div>
+
+  <div id="f1-stage" class="f1-mask">
+    <div class="f1-panel"></div>
+    <div class="f1-panel"></div>
+    <div class="f1-panel"></div>
+    <div class="f1-panel"></div>
+    <div class="f1-panel"></div>
+    <div class="f1-label p5-font-title" id="f1-text">STATUS UP</div>
+  </div>
+  
+  <script>
+    // [UI-SCRIPT] 参考代码的鼠标跟随逻辑 (直接操作 left/top 以配合 scaleX(-1))
+    const ghostCursor = document.getElementById('ghost-cursor');
+
+    window.addEventListener('mousemove', (e) => {
+      ghostCursor.style.left = e.clientX + 'px';
+      ghostCursor.style.top = e.clientY + 'px';
+    });
+    
+    // 鼠标移出窗口隐藏
+    document.addEventListener('mouseleave', () => ghostCursor.style.display = 'none');
+    document.addEventListener('mouseenter', () => ghostCursor.style.display = 'block');
+  </script>
+</body>
+</html>
